@@ -1,4 +1,3 @@
-
 import os
 import json
 import uuid
@@ -25,11 +24,74 @@ def get_db_connection():
         password="",  # Change as needed
         database="skin_care_app"
     )
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 @app.route('/bot')
 def bot():
     return render_template('bot.html')
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.get_json()
+
+    message = data.get("message")
+    language = data.get("language", "en")
+    category = data.get("category", "general")
+
+    if not message:
+        return jsonify({"reply": "Message is required"}), 400
+
+    system_prompt = f"""
+You are Wellora, a caring AI self-care assistant.
+
+Category: {category}
+Language: {language}
+
+Rules:
+- Be empathetic
+- No medical diagnosis
+- Simple, helpful advice
+"""
+
+    payload = {
+        "model": "openai/gpt-4o-mini",   # ✅ FIXED MODEL
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": message}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 500
+    }
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:5001",
+        "X-Title": "Wellora"
+    }
+
+    try:
+        res = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            json=payload,
+            headers=headers,
+            timeout=30
+        )
+
+        print(res.text)  # 🔍 DEBUG LINE
+
+        res.raise_for_status()
+        reply = res.json()["choices"][0]["message"]["content"]
+        return jsonify({"reply": reply})
+
+    except Exception as e:
+        print("Chat error:", e)
+        return jsonify({"reply": "AI is currently unavailable."}), 500
+
 
 
 @app.route("/contact")
@@ -127,9 +189,71 @@ def logout():
     return redirect(url_for('landing'))
 
 # ----------------------------- Skincare Routes (FIXED FOR ROUTING) ----------------------------- #
+import os
+import requests
+from flask import Flask, render_template, request, jsonify
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+API_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+
 @app.route("/skin_analysis")
 def skin_analysis():
     return render_template("skin_analysis.html")
+
+
+@app.route("/analyze_skin", methods=["POST"])
+def analyze_skin():
+    try:
+        features = request.json.get("features")
+
+        prompt = f"""
+You are a professional dermatologist.
+
+### 1. Skin Problems
+### 2. Complete Morning Skincare Routine
+### 3. Complete Night Skincare Routine
+### 4. Home Remedies
+
+Skin details:
+Brightness: {features['brightness']}
+Redness: {features['redness']}
+Tone: {features['overallTone']}
+"""
+
+        response = requests.post(
+            API_URL,
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "http://localhost",
+                "X-Title": "Wellora"
+            },
+            json={
+                "model": "gpt-3.5-turbo",
+                "messages": [
+                    {"role": "system", "content": "You are a dermatologist AI."},
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": 1200,
+                "temperature": 0.7
+            }
+        )
+
+        result = response.json()
+        return jsonify({"reply": result["choices"][0]["message"]["content"]})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+
 
 
 
@@ -385,7 +509,7 @@ def submit_feedback():
     user_id = cursor.fetchone()[0]
 
     cursor.execute("""
-        INSERT INTO feedback_history 
+        INSERT INTO feedback_history
         (user_id, skin_issue, date_submitted, follow_morning_routine, follow_night_routine,
          products_made_change, remedies_helpful, problem_solved, satisfaction_level,
          effectiveness_rating, suggestions)
@@ -421,7 +545,7 @@ def progress_history(problem_url_safe):
         user_id = user_result['id']
 
         cursor.execute("""
-            SELECT 
+            SELECT
                 fh.date_submitted,
                 fh.follow_morning_routine,
                 fh.follow_night_routine,
@@ -431,11 +555,11 @@ def progress_history(problem_url_safe):
                 fh.satisfaction_level,
                 fh.effectiveness_rating,
                 fh.suggestions,
-                (SELECT sleep_hours FROM analysis_history 
-                 WHERE user_id = fh.user_id AND problem = fh.skin_issue 
+                (SELECT sleep_hours FROM analysis_history
+                 WHERE user_id = fh.user_id AND problem = fh.skin_issue
                  ORDER BY id DESC LIMIT 1) as sleep_hours,
-                (SELECT water_intake FROM analysis_history 
-                 WHERE user_id = fh.user_id AND problem = fh.skin_issue 
+                (SELECT water_intake FROM analysis_history
+                 WHERE user_id = fh.user_id AND problem = fh.skin_issue
                  ORDER BY id DESC LIMIT 1) as water_intake
             FROM feedback_history fh
             WHERE fh.user_id=%s AND fh.skin_issue=%s
@@ -826,7 +950,7 @@ def academic_stress_form():
 @app.route('/stress/submit', methods=['POST'])
 def stress_submit():
     """Handles submission of stress forms and stores data into respective tables."""
-    
+   
     # Accept JSON or Form data
     if request.is_json:
         data = request.get_json()
@@ -844,7 +968,7 @@ def stress_submit():
 
         # Work Stress
         if stress_type == 'work':
-            query = '''INSERT INTO work_stress 
+            query = '''INSERT INTO work_stress
                 (name, age, gender, stress_level, stress_duration, sleep_hours,
                  overloaded_work, supportive_colleagues, work_life_balance, condition_status)
                  VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
@@ -856,7 +980,7 @@ def stress_submit():
 
         # Relationship Stress
         elif stress_type == 'relationship':
-            query = '''INSERT INTO relationship_stress 
+            query = '''INSERT INTO relationship_stress
                 (name, age, gender, stress_level, stress_duration, sleep_hours,
                  misunderstood, conflict_affects_mood, emotional_support, condition_status)
                  VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
@@ -868,7 +992,7 @@ def stress_submit():
 
         # Academic Stress
         elif stress_type == 'academic':
-            query = '''INSERT INTO academic_stress 
+            query = '''INSERT INTO academic_stress
                 (name, age, gender, stress_level, stress_duration, sleep_hours,
                  pressure_to_perform, enough_rest, exams_affect_mood, condition_status)
                  VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
@@ -878,7 +1002,7 @@ def stress_submit():
                 data['q1'], data['q2'], data['q3'], data['condition']
             )
 
-        
+       
 
         else:
             return jsonify({'success': False, 'error': 'Invalid stress type provided.'}), 400
@@ -960,7 +1084,7 @@ def stress_submit_feedback():
             'work': 'feedback_work',
             'academic': 'feedback_academic',
             'relationship': 'feedback_relationship'
-            
+           
         }
 
         table = table_map.get(stress_type)
@@ -1012,7 +1136,7 @@ def get_progress():
         'work': 'feedback_work',
         'academic': 'feedback_academic',
         'relationship': 'feedback_relationship'
-        
+       
     }
 
     table = table_map.get(stress_type)
